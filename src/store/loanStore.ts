@@ -24,7 +24,7 @@ interface LoanState {
   updateLoan: (updates: Partial<Loan>) => void;
   addExtraPayment: (month: number, amount: number, description?: string) => void;
   removeExtraPayment: (paymentId: string) => void;
-  addRateChange: (month: number, newRate: number, description?: string, newEMI?: number) => void;
+  addRateChange: (month: number, newRate: number, description?: string, newEMI?: number, emiIncreaseBy?: number) => void;
   removeRateChange: (changeId: string) => void;
   createScenario: (name: string) => void;
   switchScenario: (scenarioId: string) => void;
@@ -113,13 +113,14 @@ export const useLoanStore = create<LoanState>()(
         });
       },
       
-      addRateChange: (month, newRate, description, newEMI) => {
+      addRateChange: (month, newRate, description, newEMI, emiIncreaseBy) => {
         set((state) => {
           const newRateChange = {
             id: generateId(),
             month,
             newRate,
             newEMI, // store newEMI if provided
+            emiIncreaseBy, // store the 'increase by' value
             description,
           };
           const updatedLoan = {

@@ -33,6 +33,7 @@ export interface RateChange {
   month: number;
   newRate: number;
   newEMI?: number; // Optional: new EMI amount starting from this month
+  emiIncreaseBy?: number; // Optional: EMI increase by this amount
   description?: string;
 }
 

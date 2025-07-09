@@ -12,21 +12,22 @@
     "test:ui": "vitest --ui"
   },
   "dependencies": {
+    "clsx": "^2.0.0",
+    "date-fns": "^2.30.0",
+    "framer-motion": "^10.16.16",
+    "lucide-react": "^0.294.0",
     "react": "^18.2.0",
+    "react-beautiful-dnd": "^13.1.1",
     "react-dom": "^18.2.0",
     "react-hook-form": "^7.48.2",
-    "zustand": "^4.4.7",
+    "react-icons": "^5.5.0",
     "recharts": "^2.8.0",
-    "framer-motion": "^10.16.16",
-    "react-beautiful-dnd": "^13.1.1",
-    "date-fns": "^2.30.0",
-    "clsx": "^2.0.0",
-    "lucide-react": "^0.294.0"
+    "zustand": "^4.4.7"
   },
   "devDependencies": {
     "@types/react": "^18.2.43",
-    "@types/react-dom": "^18.2.17",
     "@types/react-beautiful-dnd": "^13.1.8",
+    "@types/react-dom": "^18.2.17",
     "@typescript-eslint/eslint-plugin": "^6.14.0",
     "@typescript-eslint/parser": "^6.14.0",
     "@vitejs/plugin-react": "^4.2.1",
@@ -40,4 +41,4 @@
     "vite": "^5.0.8",
     "vitest": "^1.0.4"
   }
-} 
+}

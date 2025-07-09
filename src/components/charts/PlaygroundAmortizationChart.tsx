@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect, useLayoutEffect } from 'react';
 import {
   AreaChart,
   Area,
@@ -9,10 +9,30 @@ import {
   Tooltip,
   Legend,
   ReferenceLine,
+  ReferenceDot,
+  Customized,
 } from 'recharts';
 import { useLoanStore } from '../../store/loanStore';
 import { formatCurrency } from '../../utils/formatters';
 import { generateAmortizationSchedule, calculateSavings } from '../../utils/calculations';
+import { FaMoneyBillWave, FaArrowUp } from 'react-icons/fa';
+
+// SVG icon for lump sum
+export const FlashPayment = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 48 48" {...props}>
+    <g fill="none" strokeLinecap="round" strokeWidth="4">
+      <path fill="#2F88FF" stroke="#000" strokeLinejoin="round" d="M31 4H16L10 27H18L14 44L40 16H28L31 4Z"></path>
+      <path stroke="#fff" d="M21 11L19 19"></path>
+    </g>
+  </svg>
+);
+// SVG icon for EMI increase
+export const UpArrow = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 64 64" {...props}>
+    <circle cx="32" cy="32" r="30" fill="#4fd1d9"></circle>
+    <path fill="#fff" d="M48 30.3L32 15L16 30.3h10.6V49h10.3V30.3z"></path>
+  </svg>
+);
 
 const PlaygroundAmortizationChart: React.FC = () => {
   const currentLoan = useLoanStore((state) => state.currentLoan);
@@ -40,7 +60,34 @@ const PlaygroundAmortizationChart: React.FC = () => {
     principal: number;
     interest: number;
   } | null>(null);
+  // Chart container ref and dimensions
   const chartRef = useRef<HTMLDivElement>(null);
+  const [chartDims, setChartDims] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
+  useLayoutEffect(() => {
+    if (chartRef.current) {
+      const rect = chartRef.current.getBoundingClientRect();
+      setChartDims({ width: rect.width, height: rect.height });
+    }
+  }, [chartRef.current, schedule]);
+
+  // Remove xScaleRef approach. Use state to store icon positions.
+  const [iconPositions, setIconPositions] = useState<Array<{ month: number; x: number }>>([]);
+
+  // Customized layer to calculate x positions
+  const IconPositionLayer = (props: any) => {
+    const { xAxisMap } = props;
+    const xScale = xAxisMap[0].scale;
+    const positions = interventions.map((intervention) => ({
+      month: intervention.month,
+      x: xScale(intervention.month),
+    }));
+    // Only update if changed
+    useEffect(() => {
+      setIconPositions(positions);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [JSON.stringify(positions)]);
+    return null;
+  };
 
   // Modal state
   const [lumpSum, setLumpSum] = useState('');
@@ -60,6 +107,41 @@ const PlaygroundAmortizationChart: React.FC = () => {
   const addExtraPayment = useLoanStore((state) => state.addExtraPayment);
   const addRateChange = useLoanStore((state) => state.addRateChange);
 
+  // Gather all intervention months and their details
+  const interventions = useMemo(() => {
+    const lumpSums = (currentLoan.extraPayments || []).map(ep => ({
+      month: ep.month,
+      type: 'lumpSum',
+      amount: ep.amount,
+    }));
+    const emiIncreases = (currentLoan.rateChanges || [])
+      .filter(rc => rc.newEMI && rc.newEMI > 0)
+      .map(rc => ({
+        month: rc.month,
+        type: 'emiIncrease',
+        amount: rc.newEMI,
+        emiIncreaseBy: rc.emiIncreaseBy, // include the 'increase by' value
+      }));
+    // Combine by month
+    const byMonth: Record<number, { lumpSum?: number; emiIncrease?: number; emiIncreaseBy?: number }> = {};
+    lumpSums.forEach(({ month, amount }) => {
+      if (!byMonth[month]) byMonth[month] = {};
+      byMonth[month].lumpSum = amount;
+    });
+    emiIncreases.forEach(({ month, amount, emiIncreaseBy }) => {
+      if (!byMonth[month]) byMonth[month] = {};
+      byMonth[month].emiIncrease = amount;
+      byMonth[month].emiIncreaseBy = emiIncreaseBy;
+    });
+    return Object.entries(byMonth).map(([month, v]) => ({
+      month: Number(month),
+      ...v,
+    }));
+  }, [currentLoan]);
+
+  // Tooltip state for intervention markers
+  const [markerTooltip, setMarkerTooltip] = useState<{ x: number; y: number; content: string } | null>(null);
+
   // Find the EMI for the selected month (before any increase)
   const selectedMonthEmi = useMemo(() => {
     if (!selectedMonth) return null;
@@ -76,7 +158,7 @@ const PlaygroundAmortizationChart: React.FC = () => {
       if (newEmi && !isNaN(Number(newEmi)) && Number(newEmi) > 0 && selectedMonthEmi != null) {
         const increaseAmount = Number(newEmi);
         const newEmiValue = selectedMonthEmi + increaseAmount;
-        addRateChange(modalMonth, 0, undefined, newEmiValue);
+        addRateChange(modalMonth, 0, undefined, newEmiValue, increaseAmount); // pass increaseAmount as emiIncreaseBy
       }
     }
     handleModalClose();
@@ -159,6 +241,9 @@ const PlaygroundAmortizationChart: React.FC = () => {
     );
   };
 
+  // Tooltip state for intervention icons
+  const [iconTooltip, setIconTooltip] = useState<{ x: number; content: string } | null>(null);
+
   return (
     <>
       <div className="w-full h-80 relative" ref={chartRef}>
@@ -204,6 +289,8 @@ const PlaygroundAmortizationChart: React.FC = () => {
             {selected && (
               <ReferenceLine x={selected.month} stroke="#fbbf24" strokeWidth={2} strokeDasharray="4 2" />
             )}
+            {/* Customized layer to calculate icon positions */}
+            <Customized component={IconPositionLayer} />
           </AreaChart>
         </ResponsiveContainer>
         {/* Always render the plus button at the selected month position */}
@@ -223,6 +310,69 @@ const PlaygroundAmortizationChart: React.FC = () => {
         )}
         {/* Always render the custom tooltip for the selected month */}
         {renderCustomTooltip(selected)}
+        {/* Permanent intervention overlays (do not interfere with + icon) */}
+        {/* (No longer needed, handled by custom SVG layer) */}
+        {markerTooltip && (
+          <div
+            className="absolute z-40 bg-gray-900 text-white text-xs rounded-lg px-3 py-2 shadow-lg pointer-events-none"
+            style={{ left: markerTooltip.x, top: markerTooltip.y }}
+          >
+            {markerTooltip.content.split('\n').map((line, i) => (
+              <div key={i}>{line}</div>
+            ))}
+          </div>
+        )}
+        {/* Absolutely positioned intervention icons above the chart */}
+        {iconPositions.length === interventions.length && interventions.map((intervention, idx) => {
+          const pos = iconPositions[idx];
+          if (!pos) return null;
+          const x = pos.x;
+          let tooltip = '';
+          if (intervention.lumpSum && intervention.emiIncrease) {
+            tooltip = `Lump sum: ₹${intervention.lumpSum.toLocaleString()}\nEMI increased by: ₹${intervention.emiIncreaseBy ? intervention.emiIncreaseBy.toLocaleString() : ''}`;
+          } else if (intervention.lumpSum) {
+            tooltip = `Lump sum: ₹${intervention.lumpSum.toLocaleString()}`;
+          } else if (intervention.emiIncrease) {
+            tooltip = `EMI increased by: ₹${intervention.emiIncreaseBy ? intervention.emiIncreaseBy.toLocaleString() : ''}`;
+          }
+          return (
+            <div
+              key={intervention.month}
+              className="absolute z-30 cursor-pointer"
+              style={{ left: x - 12, top: 0 }}
+              onMouseEnter={() => setIconTooltip({ x, content: tooltip })}
+              onMouseLeave={() => setIconTooltip(null)}
+            >
+              {/* Lump sum: FlashPayment SVG */}
+              {intervention.lumpSum && (
+                <svg width="24" height="24" viewBox="0 0 48 48">
+                  <g fill="none" strokeLinecap="round" strokeWidth="4">
+                    <path fill="#2F88FF" stroke="#000" strokeLinejoin="round" d="M31 4H16L10 27H18L14 44L40 16H28L31 4Z"></path>
+                    <path stroke="#fff" d="M21 11L19 19"></path>
+                  </g>
+                </svg>
+              )}
+              {/* EMI increase: UpArrow SVG */}
+              {intervention.emiIncrease && (
+                <svg width="28" height="28" viewBox="0 0 64 64" style={{ marginLeft: intervention.lumpSum ? 8 : 0 }}>
+                  <circle cx="32" cy="32" r="30" fill="#4fd1d9"></circle>
+                  <path fill="#fff" d="M48 30.3L32 15L16 30.3h10.6V49h10.3V30.3z"></path>
+                </svg>
+              )}
+            </div>
+          );
+        })}
+        {/* Tooltip for intervention icons */}
+        {iconTooltip && (
+          <div
+            className="absolute z-40 bg-gray-900 text-white text-xs rounded-lg px-3 py-2 shadow-lg pointer-events-none"
+            style={{ left: iconTooltip.x, top: 36 }}
+          >
+            {iconTooltip.content.split('\n').map((line, i) => (
+              <div key={i}>{line}</div>
+            ))}
+          </div>
+        )}
         {/* Modal for lump sum/EMI input */}
         {modalMonth !== null && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
